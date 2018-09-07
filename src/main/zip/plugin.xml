@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://www.urbancode.com/PluginXMLSchema_v1">
+    <header>
+        <identifier version="1" id="com.urbancode.air.plugin.MavenBuild" name="Maven Build"/>
+        <description>
+            The Maven Build plugin is an automation based plugin. It is run during development and deployment to
+            automate the execution of Maven tasks defined in a pom.xml file.
+        </description>
+        <tag>Build/Build Tools/Maven</tag>
+    </header>
+    <!-- ==================================== -->
+    <!--   PLUGIN STEPS                          -->
+    <!-- ==================================== -->
+    <step-type name="Maven">
+        <description>Execute a Maven Build command.</description>
+        <properties>
+            <property name="mvnHome" required="true">
+                <property-ui type="textBox" label="MAVEN_HOME" default-value="${MAVEN_HOME}"
+                             description="The path to the Maven installation. Default is the agent's MAVEN_HOME environment variable."/>
+            </property>
+            <property name="pomFile" required="false">
+                <property-ui type="textBox" label="Root POM" description="If your workspace has the top-level pom.xml in somewhere other than the 1st module's root directory, \
+                specify the path (relative to the module root) here, such as parent/pom.xml. If left empty, defaults to pom.xml."/>
+            </property>
+            <property name="mvnGoals">
+                <property-ui type="textBox" label="Goals"
+                             description="Specifies the goals to execute, such as 'clean install' or 'deploy'."/>
+            </property>
+            <property name="mvnOptions">
+                <property-ui type="textAreaBox" label="Options"
+                             description="This field can also accept any other command line options to Maven, such as '-e' or '-Djava.net.preferIPv4Stack=true'. \
+                             Enter each option on a new line."/>
+            </property>
+            <property name="mvnProperties">
+                <property-ui type="textAreaBox" label="Properties"
+                             description="Properties needed by your Maven build can be specified here (in the standard properties 'name=value' format). \
+                             These are passed to Maven like '-Dname1=value1 -Dname2=value2'. Enter each property on a new line."/>
+            </property>
+            <property name="injectProperties">
+                <property-ui type="checkBox" label="Inject Environment Properties"
+                             description="Pass all component environment properties into Maven process in the form of Java properties."/>
+            </property>
+            <property name="mvnSettings">
+                <property-ui type="textBox" label="User Settings File"
+                             description="The full path to an alternate Maven user settings file."/>
+            </property>
+            <property name="javaHome" required="true">
+                <property-ui type="textBox" label="JAVA_HOME" default-value="${JAVA_HOME}"
+                             description="The path to the Java installation to execute Maven. Default is the agent's JAVA_HOME environment variable."/>
+            </property>
+            <property name="jvmProperties">
+                <property-ui type="textAreaBox" label="JVM Properties"
+                             description="JVM-specific arguments, such as using '-Xmx=512m' for max memory. Enter each argument on a new line."/>
+            </property>
+            <property name="verbose">
+                <property-ui hidden="true" type="checkBox" label="Verbose"
+                             description="Display verbose output while executing commands."/>
+            </property>
+            <property name="envVars">
+                <property-ui hidden="true" type="textBox" label="Environment Properties"
+                             description="Environment properties to be passed into Maven."
+                             default-value="${p:environment/allProperties}"/>
+            </property>
+        </properties>
+        <post-processing><![CDATA[
+        properties.put("Status", "Success");
+        if (properties.get("exitCode") != 0) {
+            properties.put("Status", "Failure");
+        }
+        else {
+            scanner.register("(?i)BUILD FAILURE",  function(lineNumber, line) {
+                commandOut.println("Received Error");
+                commandOut.println(lineNumber.toString() + " : " + line);
+                var errors = properties.get("Error");
+                if (errors == null) {
+                    errors = new java.util.ArrayList();
+                }
+                errors.add(line);
+                properties.put("Error", errors);
+
+                properties.put("Status", "Failure");
+            });
+            scanner.scan();
+
+            var errors = properties.get("Error");
+            if (errors == null) {
+                errors = new java.util.ArrayList();
+            }
+            properties.put("Error", errors.toString());
+        }
+     ]]></post-processing>
+        <command program="${GROOVY_HOME}/bin/groovy">
+            <arg value="-cp"/>
+            <arg path="classes:lib/*"/>
+            <arg file="maven_exec.groovy"/>
+            <arg file="${PLUGIN_INPUT_PROPS}"/>
+            <arg file="${PLUGIN_OUTPUT_PROPS}"/>
+        </command>
+    </step-type>
+</plugin>
