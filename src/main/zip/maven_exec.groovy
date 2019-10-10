@@ -1,5 +1,17 @@
-#!/usr/bin/env groovy
+// --------------------------------------------------------------------------------
+// Execute a Maven Build command
+// --------------------------------------------------------------------------------
 
+import com.serena.air.StepFailedException
+import com.serena.air.StepPropertiesHelper
+import com.serena.air.TextAreaParser
+import com.urbancode.air.AirPluginTool
+
+//
+// Create some variables that we can use throughout the plugin step.
+// These are mainly for checking what operating system we are running on.
+//
+final def PLUGIN_HOME = System.getenv()['PLUGIN_HOME']
 final String lineSep = System.getProperty('line.separator')
 final String osName = System.getProperty('os.name').toLowerCase(Locale.US)
 final String pathSep = System.getProperty('path.separator')
@@ -8,67 +20,90 @@ final boolean vms = (osName =~ /vms/)
 final boolean os9 = (osName =~ /mac/ && !osName.endsWith('x'))
 final boolean unix = (pathSep == ':' && !vms && !os9)
 
-final def workDir = new File('.').canonicalFile
-final def props = new Properties();
-final def inputPropsFile = new File(args[0]);
-final def inputPropsStream = null;
-try {
-    inputPropsStream = new FileInputStream(inputPropsFile);
-    props.load(inputPropsStream);
-}
-catch (IOException e) {
-    throw new RuntimeException(e);
-}
-finally {
-    inputPropsStream.close();
-}
-
-final def directoryOffset = props['directoryOffset']
-final def MAVEN_HOME = props['mvnHome']?.trim()
-final def mvnPom = props['pomFile']
-final def mvnGoals = props['mvnGoals']
-final def mvnOptions = props['mvnOptions']
-final def mvnProperties = props['mvnProperties']
-final boolean injectProperties = props['injectProperties']
-final def mvnSettings = props['mvnSettings']
-final def JAVA_HOME = props['javaHome']
-final def jvmProperties = props['jvmProperties']
-final boolean verbose = props['verbose']
-final def envVars = props['envVars']
+//
+// Initialise the plugin tool and retrieve all the properties that were sent to the step.
+//
+final def  apTool = new AirPluginTool(this.args[0], this.args[1])
+final def  props  = new StepPropertiesHelper(apTool.getStepProperties(), true)
 
 //
+// Set a variable for each of the plugin steps's inputs.
+// We can check whether a required input is supplied (the helper will fire an exception if not) and
+// if it is of the required type.
+//
+File workDir = new File('.').canonicalFile
+String directoryOffset = props.optional('directoryOffset')
+String mvnHome = props.notNull('mvnHome')
+String mvnPom = props.optional('mvnPom', "pom.xml")
+String mvnGoals = props.optional('mvnGoals')
+String mvnOptions = props.optional('mvnOptions')
+String mvnProperties = props.optional('mvnProperties')
+Boolean injectProperties = props.optionalBoolean('injectProperties', false)
+String mvnSettings = props.optional('mvnSettings')
+String javaHome = props.notNull('javaHome')
+String jvmProperties = props.optional('jvmProperties')
+Boolean debugMode = props.optionalBoolean("debugMode", false)
+String envVars = props.optional('envVars')
+
+println "----------------------------------------"
+println "-- STEP INPUTS"
+println "----------------------------------------"
+
+//
+// Print out each of the property values.
+//
+println "Working directory: ${workDir.canonicalPath}"
+println "Directory Offset: ${directoryOffset}"
+println "MAVEN_HOME: ${mvnHome}"
+println "Root POM: ${mvnPom}"
+println "Goals: ${mvnGoals}"
+println "Options: ${mvnOptions}"
+println "Properties: ${mvnProperties}"
+println "Inject Environment Properties: ${injectProperties}"
+println "User Settings Fil: ${mvnSettings}"
+println "JAVA_HOME: ${javaHome}"
+println "JVM Properties: ${jvmProperties}"
+println "Debug Output: ${debugMode}"
+if (debugMode) { props.setDebugLoggingMode() }
+
+int exitCode = -1;
+
+//
+// The main body of the plugin step - wrap it in a try/catch statement for handling any exceptions.
+//
+try {
+
+    //
 // Validation
 //
 
-if (directoryOffset) {
-    workDir = new File(workDir, directoryOffset).canonicalFile
-}
+    if (directoryOffset) {
+        workDir = new File(workDir, directoryOffset).canonicalFile
+    }
 
-if (workDir.isFile()) {
-    throw new IllegalArgumentException("Working directory ${workDir} is a file!")
-}
+    if (workDir.isFile()) {
+        throw new StepFailedException("Working directory ${workDir} is a file!")
+    }
 
-if (mvnPom == null) {
-    println("Maven POM not specified, using pom.xml.");
-    mvnPom = "pom.xml"
-}
+    if (mvnPom == null) {
+        println("Maven POM not specified, using pom.xml.");
+        mvnPom = "pom.xml"
+    }
 
-if (MAVEN_HOME == null) {
-    throw new IllegalStateException("MAVEN_HOME not specified");
-}
+    if (mvnHome== null) {
+        throw new StepFailedException("MAVEN_HOME not specified");
+    }
 
-if (JAVA_HOME == null) {
-    throw new IllegalStateException("JAVA_HOME not specified");
-}
+    if (javaHome == null) {
+        throw new StepFailedException("JAVA_HOME not specified");
+    }
 
-// ensure work-dir exists
-workDir.mkdirs()
+    // ensure work-dir exists
+    workDir.mkdirs()
 
-final def mvnFile = new File(workDir, mvnPom)
+    final def mvnFile = new File(workDir, mvnPom)
 
-int exitCode = -1;
-try {
-    def mvnExe = new File(MAVEN_HOME, "bin/mvn" + (windows ? ".cmd" : ""))
+    def mvnExe = new File(mvnHome, "bin/mvn" + (windows ? ".cmd" : ""))
 
     def MAVEN_OPTS = ""
 
@@ -114,7 +149,7 @@ try {
                 MAVEN_OPTS += property + " "
             }
         }
-        if (verbose) println("setting MAVEN_OPTS: '${MAVEN_OPTS}'")
+        if (debugMode) println("setting MAVEN_OPTS: '${MAVEN_OPTS}'")
     }
 
     if (injectProperties) {
@@ -128,7 +163,7 @@ try {
             propValue = propValue.replace("\\=", "=").replace("\\,", ",").replace("\\\\", "\\")
             def property = "-D" + propName + '=' + propValue
             commandLine.add(property)
-            if (verbose) println("setting variable from DA environment: '${propName}=${propValue}'")
+            if (debugMode) println("setting variable from DA environment: '${propName}=${propValue}'")
         }
     }
 
@@ -136,7 +171,6 @@ try {
         commandLine.add("-s")
         commandLine.add(mvnSettings)
     }
-
 
     // print out command info
     println("")
@@ -149,8 +183,8 @@ try {
     // Launch Process
     //
     final def processBuilder = new ProcessBuilder(commandLine as String[]).directory(workDir)
-    processBuilder.environment().put("MAVEN_HOME", MAVEN_HOME)
-    processBuilder.environment().put("JAVA_HOME", JAVA_HOME)
+    processBuilder.environment().put("MAVEN_HOME", mvnHome)
+    processBuilder.environment().put("JAVA_HOME", javaHome)
     if (MAVEN_OPTS) processBuilder.environment().put("MAVEN_OPTS", MAVEN_OPTS)
     final def process = processBuilder.start()
     process.out.close() // close stdin
@@ -163,8 +197,16 @@ try {
     println("")
 
     exitCode = process.exitValue();
+} catch (StepFailedException e) {
+    //
+    // Catch any exceptions we find and print their details out.
+    //
+    println "ERROR: ${e.message}"
+    // An exit with a non-zero value will be deemed a failure
+    System.exit 1
 }
-finally {
 
-}
+//
+// An exit with a zero value means the plugin step execution will be deemed successful.
+//
 System.exit(exitCode);

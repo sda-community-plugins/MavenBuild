@@ -13,33 +13,51 @@
     <artifactId>MavenBuild</artifactId>
     <packaging>pom</packaging>
     <name>MavenBuild</name>
+    <description>A simple plugin to execute Apache Maven</description>
+    <version>1.0</version>
 
     <properties>
-        <air.plugin.build.script.relative.path>../air-plugin-build-script</air.plugin.build.script.relative.path>
+        <air.plugin.build.parent.absolute.path>${basedir}/../air-plugin-build-parent</air.plugin.build.parent.absolute.path>
+        <!-- this is the minimum version of DA your plugin is "supported" on -->
+        <mininum.server.version.needed>6.2</mininum.server.version.needed>
+        <!-- change this when you create a new version of your plugin -->
+        <plugin.major.version>1</plugin.major.version>
+        <plugin.build.version>dev</plugin.build.version>
     </properties>
 
+    <repositories>
+        <repository>
+            <id>local-repository</id>
+            <url>file://../mavenBuildConfig/repo</url>
+        </repository>
+    </repositories>
+
     <dependencies>
+        <!-- These dependencies are required for the Serena helper classes and build process. -->
         <dependency>
             <groupId>com.serena</groupId>
-            <artifactId>commons-fileutils</artifactId>
+            <artifactId>air-plugin-ant-tasks</artifactId>
             <version>CURRENT</version>
-            <scope>runtime</scope>
+            <scope>test</scope>
+            <optional>true</optional>
         </dependency>
         <dependency>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
-            <scope>runtime</scope>
+            <groupId>com.serena</groupId>
+            <artifactId>plugins-commons</artifactId>
+            <version>CURRENT</version>
         </dependency>
         <dependency>
-            <groupId>commons-lang</groupId>
-            <artifactId>commons-lang</artifactId>
-            <version>2.5</version>
-            <scope>runtime</scope>
+            <groupId>com.serena</groupId>
+            <artifactId>plugins-commons</artifactId>
+            <version>CURRENT</version>
+            <classifier>sources</classifier>
+            <type>zip</type>
+            <optional>true</optional>
         </dependency>
     </dependencies>
 
     <build>
-        <finalName>MavenBuild</finalName>
+        <finalName>${project.name}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
